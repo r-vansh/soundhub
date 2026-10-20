@@ -1,13 +1,4 @@
 # soundhub
 
-- [Garden sound pad](garden-sound-pad/): a dot garden in Framer where every interaction makes a sound. Live page: https://r-vansh.github.io/soundhub/
-
-## Live page
-
-`docs/` is the GitHub Pages site: the garden component built as a plain web page. To rebuild it after changing `garden-sound-pad/GardenHero.tsx`:
-
-```
-cd site
-npm install
-npm run build
-```
+- **Garden sound board** (live: https://r-vansh.github.io/soundhub/): every sound from the garden hero as a playable pad, the four ambient beds, a swipe test strip and the live garden with the sounds wired in. All sounds are synthesized in the browser, with no audio files. Source: [`docs/index.html`](docs/index.html).
+- [Garden sound pad component](garden-sound-pad/): the Framer code component the sounds belong to.

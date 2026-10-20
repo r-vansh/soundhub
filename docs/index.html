@@ -1,16 +1,893 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Garden sound pad</title>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Garden Sound Board</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Doto:wght@600;800&family=Geist:wght@400;500&family=Geist+Mono:wght@400;500&display=swap">
 <style>
-  html, body { margin: 0; height: 100%; background: #0d0f0c; overflow: hidden; }
-  #root { position: fixed; inset: 0; }
+  /* Layout: one column of controls, then a grid of sound pads, then a wide swipe pad.
+     Single dark look on purpose: it matches the dark garden hero the sounds belong to. */
+  :root {
+    --bg: #0d110c;
+    --surface: #151b14;
+    --line: #253023;
+    --fg: #e6ece0;
+    --muted: #8b9786;
+    --leaf: #5dbb63;
+    --accent: #ff5a2f;
+    --pollen: #ffe9a8;
+    --display: "Doto", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --body: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.5;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 32px 48px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; display: grid; gap: 28px; }
+  header { display: grid; gap: 8px; }
+  h1 {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: clamp(36px, 7vw, 60px);
+    line-height: 1;
+    margin: 0;
+    letter-spacing: 0.02em;
+    color: var(--leaf);
+    text-wrap: balance;
+  }
+  .lede { margin: 0; color: var(--muted); max-width: 62ch; }
+  .lede b { color: var(--fg); font-weight: 500; }
+
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center;
+    padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
+  }
+  .controls label { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  input[type="range"] { accent-color: var(--leaf); width: 140px; }
+  .btn {
+    font: 500 13px var(--mono); color: var(--fg); background: transparent;
+    border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; cursor: pointer;
+  }
+  .btn:hover { border-color: var(--muted); }
+  .btn[aria-pressed="true"] { border-color: var(--leaf); color: var(--leaf); }
+  .btn.primary { background: var(--leaf); border-color: var(--leaf); color: #0d110c; }
+  .btn:focus-visible, .pad:focus-visible, .swipe:focus-visible { outline: 2px solid var(--pollen); outline-offset: 2px; }
+
+  .section-label { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 -14px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+  .pad {
+    display: grid; gap: 6px; align-content: start; text-align: left;
+    background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 16px 16px; cursor: pointer; font: inherit; min-width: 0;
+    transition: border-color .15s, transform .08s;
+  }
+  .pad:hover { border-color: var(--muted); }
+  .pad:active { transform: scale(0.985); }
+  .pad .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .pad .name { font-weight: 500; }
+  .pad .key { font: 12px var(--mono); color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
+  .pad .what { color: var(--muted); font-size: 13px; }
+  .dots { display: flex; gap: 5px; margin-top: 4px; }
+  .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--line); transition: background .25s; }
+  .pad.on .dots i { background: var(--c, var(--leaf)); transition: none; }
+  .pad.amb[aria-pressed="true"] { border-color: var(--c); }
+  .pad.amb[aria-pressed="true"] .key { color: var(--c); border-color: var(--c); }
+  .pad.amb[aria-pressed="true"] .dots i { background: var(--c); animation: breathe 2.5s ease-in-out infinite; }
+  .pad.amb[aria-pressed="true"] .dots i:nth-child(2n) { animation-delay: -1.25s; }
+  @keyframes breathe { 50% { opacity: 0.3; } }
+
+  .swipe {
+    position: relative; height: 150px; border-radius: 12px; border: 1px dashed var(--line);
+    background:
+      radial-gradient(circle, var(--line) 1.1px, transparent 1.4px) 0 0 / 14px 14px,
+      var(--surface);
+    display: grid; place-items: center; text-align: center; color: var(--muted);
+    font: 13px var(--mono); touch-action: pan-y; user-select: none; -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent; overflow: hidden;
+  }
+  .swipe canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .swipe-stats { margin: -12px 0 0; font: 12px var(--mono); color: var(--muted); }
+  .tune { margin-top: -12px; }
+  .tune output { color: var(--fg); min-width: 4ch; }
+  .swipe span { position: relative; background: var(--surface); padding: 4px 10px; border-radius: 999px; }
+
+  .garden-head { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+  .garden-head p { margin: 0; color: var(--muted); font-size: 13px; max-width: 60ch; }
+  .garden-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .garden-tools label { display: flex; gap: 8px; align-items: center; font: 13px var(--mono); color: var(--muted); }
+  select { font: 13px var(--mono); color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+  .garden {
+    position: relative; height: clamp(420px, 62vh, 620px); border-radius: 14px; overflow: hidden;
+    border: 1px solid var(--line); background: var(--bg);
+  }
+  .garden-fallback { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font: 13px var(--mono); }
+  footer { color: var(--muted); font-size: 13px; display: grid; gap: 4px; }
+  footer code { font-family: var(--mono); color: var(--fg); }
+  @media (prefers-reduced-motion: reduce) { .pad, .dots i { transition: none; animation: none !important; } }
 </style>
-</head>
-<body>
-<div id="root"></div>
-<script type="module" src="garden.js"></script>
-</body>
-</html>
+
+<div class="wrap">
+  <header>
+    <h1>Garden Sounds</h1>
+    <p class="lede">Each sound for the garden hero, so you can hear them before they go into the component. All of them are <b>generated live in your browser</b>, with 0 KB of audio files. Press a pad a few times: every press comes out slightly different. Everything is tuned to <b>Refreshed</b>: A♭ major, 96 BPM, mellow e-piano notes over soft sub bass, with the top end rolled off for the same warm lo-fi feel. All notes sit in one scale, so any mix sounds good together.</p>
+  </header>
+
+  <div class="controls" role="group" aria-label="Sound controls">
+    <label for="vol">Volume <input id="vol" type="range" min="0" max="1" step="0.01" value="0.35"></label>
+    <button class="btn" id="mute" aria-pressed="false">Mute</button>
+    <button class="btn primary" id="scene">Play a garden moment</button>
+  </div>
+
+  <p class="section-label">Sounds</p>
+  <div class="grid" id="grid"></div>
+
+  <p class="section-label">Ambient</p>
+  <div class="garden-head">
+    <p>Four takes on the slow pad, all on bright major chords in A♭ at 96 BPM. They stay soft and continuous and fade in over a couple of seconds. Press one to play it and press it again to stop. Only one plays at a time, and it keeps going under the garden below.</p>
+    <div class="garden-tools">
+      <label for="ambVol">Ambient level <input id="ambVol" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+    </div>
+  </div>
+  <div class="grid" id="ambientGrid"></div>
+
+  <p class="section-label">Swipe test</p>
+  <div class="swipe" id="swipe" tabindex="0" aria-label="Swipe pad: move across it to hear rustles and pollen">
+    <canvas id="swipeCanvas"></canvas>
+    <span>Move your cursor or swipe sideways across here, slow then fast</span>
+  </div>
+  <div class="garden-tools tune" role="group" aria-label="Touch swipe tuning">
+    <label for="touchStep">Touch: px per thud <input id="touchStep" type="range" min="4" max="40" step="1" value="20"> <output id="touchStepOut">20</output></label>
+    <label for="touchGap">Touch: min gap <input id="touchGap" type="range" min="10" max="60" step="1" value="14"> <output id="touchGapOut">14 ms</output></label>
+  </div>
+  <p class="swipe-stats" id="swipeStats" aria-live="polite">On a phone, swipe across the strip and a readout of that swipe appears here.</p>
+
+  <p class="section-label">Live garden</p>
+  <div class="garden-head">
+    <p>The real garden component with these sounds wired in. Click to plant, hover or swipe to sway, tap a plant, drag to move, and drop at an edge to remove. Watch for birds. The first click turns sound on.</p>
+    <div class="garden-tools">
+      <label for="treeTap">Tree tap
+        <select id="treeTap">
+          <option value="marimba">A: Marimba</option>
+          <option value="tom">B: Floor tom</option>
+          <option value="shaker">C: Leaf shaker</option>
+        </select>
+      </label>
+      <label for="pollenKind">Pollen
+        <select id="pollenKind">
+          <option value="celesta">A: Celesta</option>
+          <option value="dewdrop">B: Dewdrop</option>
+          <option value="breath">C: Breath</option>
+          <option value="glint">D: Glint (A + B)</option>
+        </select>
+      </label>
+      <button class="btn" id="resetGarden" type="button">Reset garden</button>
+    </div>
+  </div>
+  <div class="garden" id="garden"><div class="garden-fallback" id="gardenFallback">Loading the garden…</div></div>
+
+  <footer>
+    <div>Keys <code>1</code> to <code>9</code>, <code>0</code>, <code>Q</code>, <code>W</code>, <code>E</code>, <code>R</code> and <code>T</code> play the pads. On a phone, the first tap unlocks sound, the same way it will in the hero.</div>
+    <div>Swipe sounds are limited to about 8 rustles and 4 twinkles a second, which is how the hero will keep fast swipes from piling up.</div>
+  </footer>
+</div>
+
+<script>
+(() => {
+  // ── Audio engine (the same code planned for the component) ──
+  // Tuned to "Refreshed": A♭ major, ~96 BPM, warm and bass-heavy
+  const SCALE = [0, 2, 4, 7, 9]; // A♭ major pentatonic: A♭ B♭ C E♭ F
+  const midi = (n) => 440 * Math.pow(2, (n - 69) / 12);
+  const BEAT = 60 / 96, SIX = BEAT / 4; // one beat and one 16th at 96 BPM
+  const note = (deg, base = 56) => {
+    const o = Math.floor(deg / 5), i = ((deg % 5) + 5) % 5;
+    return 440 * Math.pow(2, (base + o * 12 + SCALE[i] - 69) / 12);
+  };
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+  let ctx = null, master = null, noiseBuf = null, echoIn = null, voices = 0;
+  let volume = 0.35, muted = false;
+  const MAX_VOICES = 24; // room for a fast touch roll without dropping thuds
+
+  function audio() {
+    if (!ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      ctx = new AC();
+      master = ctx.createGain();
+      master.gain.value = muted ? 0 : volume;
+      // Lo-fi warmth: roll off the top end and round off peaks, like the track
+      const tape = ctx.createBiquadFilter(); tape.type = "lowpass"; tape.frequency.value = 3600; tape.Q.value = 0.5;
+      const warm = ctx.createWaveShaper();
+      const curve = new Float32Array(1024);
+      for (let i = 0; i < curve.length; i++) { const x = (i / 511.5) - 1; curve[i] = Math.tanh(1.6 * x) / Math.tanh(1.6); }
+      warm.curve = curve;
+      const comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -16; comp.ratio.value = 4;
+      master.connect(tape).connect(warm).connect(comp).connect(ctx.destination);
+      // White noise source, shared by every rustle
+      noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      // Short echo used by the rare chime
+      echoIn = ctx.createGain();
+      const delay = ctx.createDelay(1); delay.delayTime.value = 0.16;
+      const fb = ctx.createGain(); fb.gain.value = 0.35;
+      const wet = ctx.createGain(); wet.gain.value = 0.5;
+      echoIn.connect(delay); delay.connect(fb).connect(delay); delay.connect(wet).connect(master);
+    }
+    if (ctx.state === "suspended") ctx.resume();
+    return ctx;
+  }
+
+  function out(pan, toEcho) {
+    const p = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain();
+    if (p.pan) p.pan.value = Math.max(-1, Math.min(1, pan || 0));
+    p.connect(master);
+    if (toEcho) p.connect(echoIn);
+    return p;
+  }
+
+  function claim(dur) {
+    if (voices >= MAX_VOICES) return false;
+    voices++;
+    setTimeout(() => voices--, dur * 1000 + 50);
+    return true;
+  }
+
+  function tone({ freq, to, type = "sine", at = 0, dur = 0.2, gain = 0.2, attack = 0.005, slide = 0.05, pan = 0, echo = false, lp = 0 }) {
+    const c = audio(); if (!c || !claim(dur)) return;
+    const t = c.currentTime + at;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t);
+    if (to) o.frequency.exponentialRampToValueAtTime(to, t + slide);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    if (lp) {
+      const f = c.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = lp; f.Q.value = 0.6;
+      o.connect(f).connect(g);
+    } else o.connect(g);
+    g.connect(out(pan, echo));
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+
+  function noise({ at = 0, dur = 0.15, gain = 0.15, type = "bandpass", freq = 3000, to, q = 0.8, pan = 0, attack = 0.004 }) {
+    const c = audio(); if (!c || !claim(dur)) return;
+    const t = c.currentTime + at;
+    const s = c.createBufferSource(); s.buffer = noiseBuf;
+    s.playbackRate.value = rand(0.8, 1.2);
+    const f = c.createBiquadFilter(); f.type = type; f.Q.value = q;
+    f.frequency.setValueAtTime(freq, t);
+    if (to) f.frequency.exponentialRampToValueAtTime(to, t + dur);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(f).connect(g).connect(out(pan));
+    s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.02);
+  }
+
+  // ── The sounds ──
+  // Mellow e-piano voice: sine body + a quiet octave partial, low-passed
+  function keys(f, { at = 0, dur = 0.9, gain = 0.12, pan = 0, echo = false, lp = 1700 } = {}) {
+    tone({ freq: f, at, dur, gain, attack: 0.012, pan, echo, lp });
+    tone({ freq: f * 2.003, at, dur: dur * 0.45, gain: gain * 0.22, attack: 0.008, pan, echo, lp });
+  }
+  // Round sub note under a sound, one octave below
+  function sub(f, { at = 0, dur = 0.5, gain = 0.16 } = {}) {
+    tone({ freq: f / 2, at, dur, gain, attack: 0.02, lp: 300 });
+  }
+
+  let pollenKind = "celesta";
+  const S = {
+    // Taller plants (h near 1) start lower; rising notes land on 16ths at 96 BPM
+    spawn(h = Math.random()) {
+      const deg = 5 - Math.round(h * 4);
+      keys(note(deg), { dur: 1.1, gain: 0.13 });
+      sub(note(deg), { dur: 0.7, gain: 0.17 });
+      noise({ dur: 0.08, gain: 0.03, type: "lowpass", freq: 900 });
+      [2, 4, 5].slice(0, pick([2, 3])).forEach((step, i) =>
+        keys(note(deg + step), { at: SIX * (i + 1), dur: 0.6, gain: 0.055 }));
+    },
+    // A♭maj9 rolled up in 16ths over a low A♭
+    rare() {
+      [68, 72, 75, 79, 82].forEach((n, i) =>
+        keys(midi(n), { at: i * SIX * 0.75, dur: 1.6, gain: 0.06, echo: true, lp: 2200, pan: (i - 2) * 0.2 }));
+      sub(midi(56), { dur: 1.4, gain: 0.18 });
+    },
+    // Low, bassy leaf swoosh: a soft sub thump (E♭→A♭) under low-passed noise grains
+    rustle(intensity = 0.7, pan = 0) {
+      tone({ freq: midi(39) * rand(0.98, 1.02), to: midi(32), dur: 0.24, gain: 0.1 + intensity * 0.16,
+             attack: 0.02, slide: 0.18, pan });
+      const grains = 2 + Math.round(intensity * 3);
+      for (let i = 0; i < grains; i++) {
+        noise({ at: i * rand(0.03, 0.06), dur: rand(0.09, 0.16), gain: 0.07 + intensity * 0.11,
+                type: "lowpass", freq: rand(450, 950), q: rand(0.5, 0.9), attack: 0.012, pan });
+      }
+      noise({ at: 0.02, dur: 0.1, gain: 0.02 + intensity * 0.02, freq: rand(1300, 1800), q: 0.7, pan });
+    },
+    // Hover / swipe sway: a soft bass-drum thud tuned to A♭, with a faint leaf brush on top.
+    // Pitch drops fast from ~150 Hz to A♭1 (52 Hz) like a kick; harder swings hit harder.
+    // `quick` is for rapid swipes: a shorter, tighter hit so fast rolls stay crisp
+    sway(intensity = 0.7, pan = 0, quick = false) {
+      const v = 0.45 + intensity * 0.55;
+      if (quick) {
+        tone({ freq: rand(135, 160), to: midi(32), slide: 0.04, dur: 0.16, gain: 0.42 * v, attack: 0.002, lp: 900, pan: pan * 0.3 });
+        noise({ dur: 0.01, gain: 0.05 * v, type: "lowpass", freq: 2200, attack: 0.001 });
+        return;
+      }
+      tone({ freq: rand(140, 165), to: midi(32), slide: 0.055, dur: 0.38, gain: 0.5 * v, attack: 0.002, lp: 900, pan: pan * 0.3 });
+      tone({ freq: midi(32), dur: 0.32, gain: 0.16 * v, attack: 0.01, lp: 200 });
+      noise({ dur: 0.014, gain: 0.07 * v, type: "lowpass", freq: 2200, attack: 0.001 });
+      noise({ at: 0.01, dur: 0.12, gain: 0.025 * v, type: "lowpass", freq: rand(600, 900), q: 0.6, attack: 0.01, pan });
+    },
+    // Tap tree, option A: warm marimba note from the A♭ scale, mallet click on top
+    marimba() {
+      const f = note(Math.floor(rand(0, 5)));
+      tone({ freq: f, dur: 0.55, gain: 0.22, attack: 0.002, lp: 2400 });
+      tone({ freq: f * 4, dur: 0.07, gain: 0.05, attack: 0.001, lp: 3000 });
+      tone({ freq: f / 2, dur: 0.3, gain: 0.08, attack: 0.004, lp: 300 });
+      noise({ at: 0.01, dur: 0.1, gain: 0.02, type: "lowpass", freq: 800, attack: 0.01 });
+    },
+    // Tap tree, option B: deep floor-tom hit that drops onto A♭2, sits with the sway kick
+    tom() {
+      tone({ freq: midi(51) * rand(1.4, 1.55), to: midi(44), slide: 0.09, dur: 0.5, gain: 0.38, attack: 0.002, lp: 700 });
+      tone({ freq: midi(44) * 1.5, dur: 0.12, gain: 0.05, attack: 0.002, lp: 900 });
+      noise({ dur: 0.025, gain: 0.07, type: "lowpass", freq: 1500, attack: 0.001 });
+      noise({ at: 0.015, dur: 0.14, gain: 0.025, type: "lowpass", freq: 700, attack: 0.01 });
+    },
+    // Tap tree, option C: leaves shaking like a lo-fi shaker, two hits in 16ths over a soft thump
+    shaker() {
+      tone({ freq: midi(44), to: midi(32), slide: 0.06, dur: 0.22, gain: 0.16, attack: 0.003, lp: 400 });
+      [0, SIX, SIX * 2].slice(0, pick([2, 3])).forEach((at, i) =>
+        noise({ at, dur: rand(0.05, 0.08), gain: i ? 0.06 : 0.09, freq: rand(2200, 2900), q: 1.1, attack: 0.008, pan: rand(-0.3, 0.3) }));
+    },
+    // Hollow wooden tok in A♭ plus a rustle
+    knock() {
+      tone({ freq: midi(44), to: midi(32), dur: 0.2, gain: 0.3, slide: 0.12, lp: 600 });
+      tone({ freq: midi(63), dur: 0.09, gain: 0.05, lp: 1200 });
+      noise({ dur: 0.04, gain: 0.07, type: "lowpass", freq: 800 });
+      S.rustle(0.5);
+    },
+    flower() {
+      S.rustle(0.45);
+      noise({ at: 0.03, dur: 0.2, gain: 0.05, freq: 2400, to: 700, q: 0.6 });
+      for (let i = 0; i < 3; i++) S.pollen(rand(-0.4, 0.4), SIX * (i + 1));
+    },
+    // Plays whichever pollen option is picked below the pads
+    pollen(pan = rand(-0.5, 0.5), at = 0) { S[pollenKind](pan, at); },
+    // A: muted celesta tick in the upper octave
+    celesta(pan = rand(-0.5, 0.5), at = 0) {
+      keys(note(Math.floor(rand(10, 15))), { at, dur: rand(0.4, 0.7), gain: 0.03, pan, lp: 2400 });
+    },
+    // B: dewdrop, a short round blip that bends up into the note, with a soft echo
+    dewdrop(pan = rand(-0.5, 0.5), at = 0) {
+      const f = note(Math.floor(rand(7, 12)));
+      tone({ freq: f * 0.7, to: f, slide: 0.03, at, dur: rand(0.16, 0.26), gain: 0.06, attack: 0.003, pan, echo: true, lp: 2000 });
+      tone({ freq: f * 2.76, at, dur: 0.05, gain: 0.006, attack: 0.002, pan, lp: 3200 });
+    },
+    // D: glint, A + B: the dewdrop's bend-up blip as the attack, then a celesta body that rings into the echo
+    glint(pan = rand(-0.5, 0.5), at = 0) {
+      const f = note(Math.floor(rand(9, 13)));
+      tone({ freq: f * 0.75, to: f, slide: 0.025, at, dur: 0.1, gain: 0.04, attack: 0.002, pan, lp: 2200 });
+      keys(f, { at: at + 0.012, dur: rand(0.45, 0.65), gain: 0.026, pan, echo: true, lp: 2400 });
+      tone({ freq: f * 2.76, at, dur: 0.04, gain: 0.004, attack: 0.002, pan, lp: 3200 });
+    },
+    // C: breath, a soft airy flute puff: noise tuned tight to the note with a faint tone inside
+    breath(pan = rand(-0.5, 0.5), at = 0) {
+      const f = note(Math.floor(rand(7, 12)));
+      noise({ at, dur: rand(0.35, 0.5), gain: 0.22, type: "bandpass", freq: f, q: 28, attack: 0.05, pan });
+      tone({ freq: f, at: at + 0.02, dur: 0.4, gain: 0.014, attack: 0.06, pan, lp: 2000 });
+    },
+    pickup() {
+      keys(note(5), { dur: 0.3, gain: 0.08 });
+      keys(note(7), { at: SIX / 2, dur: 0.35, gain: 0.08 });
+      S.rustle(0.25);
+    },
+    drop() {
+      tone({ freq: midi(44), to: midi(37), dur: 0.26, gain: 0.26, slide: 0.12, lp: 500 });
+      noise({ dur: 0.08, gain: 0.05, type: "lowpass", freq: 600 });
+    },
+    // Four notes falling down the scale in 16ths, with a soft swoosh
+    remove() {
+      [9, 7, 5, 2].forEach((d, i) => keys(note(d), { at: i * SIX, dur: 0.5, gain: 0.07 * (1 - i * 0.18) }));
+      noise({ dur: 0.45, gain: 0.04, type: "lowpass", freq: 1500, to: 300 });
+    },
+    // Softer, lower chirps so birds sit inside the warm mix
+    chirp(at = 0, pan = 0, gain = 0.05) {
+      const f = rand(1500, 2100);
+      tone({ freq: f, to: f * rand(1.3, 1.45), at, dur: 0.08, gain, slide: 0.05, pan, lp: 3000 });
+      tone({ freq: f * 1.4, to: f * 1.05, at: at + 0.085, dur: 0.07, gain: gain * 0.8, slide: 0.05, pan, lp: 3000 });
+    },
+    flock() {
+      const side = pick([-0.7, 0.7]);
+      S.chirp(0, side, 0.035);
+      if (Math.random() < 0.7) S.chirp(SIX * 2, side * 0.8, 0.028);
+    },
+    scatter() {
+      const c = audio(); if (!c) return;
+      // Wing flutter: noise chopped quickly by a square-wave LFO
+      if (claim(0.6)) {
+        const t = c.currentTime;
+        const s = c.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
+        const f = c.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 900; f.Q.value = 0.8;
+        const g = c.createGain(); g.gain.value = 0;
+        const lfo = c.createOscillator(); lfo.type = "square"; lfo.frequency.value = rand(16, 22);
+        const depth = c.createGain(); depth.gain.value = 0.09;
+        const env = c.createGain();
+        env.gain.setValueAtTime(1, t); env.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+        lfo.connect(depth).connect(g.gain);
+        s.connect(f).connect(g).connect(env).connect(out(rand(-0.3, 0.3)));
+        s.start(t); lfo.start(t); s.stop(t + 0.6); lfo.stop(t + 0.6);
+      }
+      const n = 3 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < n; i++) S.chirp(SIX * Math.floor(rand(0, 4)) + rand(0, 0.04), rand(-0.8, 0.8), 0.045);
+    },
+  };
+
+  // ── Ambient beds: four calm, continuous drones in A♭ ──
+  // No plucks or rhythm: everything fades in and out over seconds, sits low (A♭2 to C4),
+  // and is low-passed well below the interaction sounds so it stays in the background.
+  let ambLevel = 0.5, amb = null;
+
+  // A long note on a bed: slow linear swell in, hold, slow fade out
+  function aTone(dest, { freq, t, dur, gain, type = "sine", attack = 4, release = 5, pan = 0, detune = 0, mod = null }) {
+    const c = ctx;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.value = freq; o.detune.value = detune;
+    if (mod) mod.connect(o.detune);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(gain, t + attack);
+    g.gain.setValueAtTime(gain, t + Math.max(attack, dur - release));
+    g.gain.linearRampToValueAtTime(0.0001, t + dur);
+    const p = c.createStereoPanner ? c.createStereoPanner() : c.createGain();
+    if (p.pan) p.pan.value = pan;
+    o.connect(g).connect(p).connect(dest);
+    o.start(t); o.stop(t + dur + 0.05);
+  }
+  // An oscillator that holds until the bed stops
+  function aHold(dest, b, { freq, type = "sine", gain, detune = 0, pan = 0 }) {
+    const c = ctx, o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.value = freq; o.detune.value = detune; g.gain.value = gain;
+    const p = c.createStereoPanner ? c.createStereoPanner() : c.createGain();
+    if (p.pan) p.pan.value = pan;
+    o.connect(g).connect(p).connect(dest); o.start(); b.keep.push(o);
+  }
+  // A very slow LFO on any parameter
+  function aLfo(param, b, rate, depth) {
+    const c = ctx, o = c.createOscillator(), g = c.createGain();
+    o.frequency.value = rate; g.gain.value = depth;
+    o.connect(g).connect(param); o.start(); b.keep.push(o);
+  }
+  function aLowpass(dest, freq, q = 0.5) {
+    const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = freq; f.Q.value = q;
+    f.connect(dest); return f;
+  }
+
+  // Bright, all-major loop: A♭maj9 → D♭maj9(♯11) → E♭add9 → D♭ over E♭, voiced A♭3 to B♭4,
+  // with a soft root an octave below. 4 bars (10 s) per chord.
+  const PAD_CHORDS = [
+    { root: 44, notes: [56, 60, 63, 67, 70] },
+    { root: 49, notes: [53, 56, 60, 63, 67] },
+    { root: 51, notes: [55, 58, 63, 65, 70] },
+    { root: 51, notes: [53, 56, 61, 65, 68] },
+  ];
+  const PAD_LEN = BEAT * 16;
+  // One chord of the pad: three detuned saws per note through the bed's filter, plus a round root
+  function padChord(b, ch, t, gain = 0.014) {
+    const dur = PAD_LEN + 3;
+    ch.notes.forEach((n, i) => {
+      for (const det of [-8, 0, 8]) aTone(b.lp, { freq: midi(n), t, dur, gain, type: "sawtooth", attack: 1.8, release: 3, detune: det, pan: (i - 2) * 0.18, mod: b.wobble });
+    });
+    aTone(b.bus, { freq: midi(ch.root), t, dur, gain: 0.07, type: "triangle", attack: 1.5, release: 3, mod: b.wobble });
+  }
+  function padBegin(b, cutoff = 950) {
+    b.step = 0; b.next = ctx.currentTime + 0.1; b.beat = b.next;
+    b.lp = aLowpass(b.bus, cutoff, 0.7);
+    aLfo(b.lp.frequency, b, 0.05, 280);
+  }
+
+  const BEDS = {
+    // 1: sunny pad. The slow pad you liked, on major chords that move every 10 s, with a
+    // brighter, slowly breathing filter
+    sunny: {
+      begin(b) { padBegin(b); },
+      run(b, until) {
+        while (b.next < until) { padChord(b, PAD_CHORDS[b.step % 4], b.next); b.step++; b.next += PAD_LEN; }
+      },
+    },
+    // 2: breathing pulse. The same pad gently ducking on every beat at 96 BPM, the soft
+    // "pumping" of lo-fi tracks, so it moves with a heartbeat but never stops
+    pulse: {
+      begin(b) {
+        b.duck = ctx.createGain(); b.duck.gain.value = 1;
+        const out = b.bus; b.bus = b.duck; b.duck.connect(out); b.out = out;
+        padBegin(b);
+      },
+      run(b, until) {
+        while (b.next < until) { padChord(b, PAD_CHORDS[b.step % 4], b.next); b.step++; b.next += PAD_LEN; }
+        while (b.beat < until) {
+          const g = b.duck.gain;
+          g.setValueAtTime(1, b.beat);
+          g.linearRampToValueAtTime(0.55, b.beat + 0.03);
+          g.linearRampToValueAtTime(1, b.beat + BEAT * 0.85);
+          b.beat += BEAT;
+        }
+      },
+    },
+    // 3: pad with a slow arpeggio. A quieter pad with soft, overlapping notes rolling up and
+    // down the current chord in 8ths, like a gentle music loop
+    arp: {
+      begin(b) { padBegin(b, 800); b.arp = b.next; b.i = 0; },
+      run(b, until) {
+        while (b.next < until) { padChord(b, PAD_CHORDS[b.step % 4], b.next, 0.01); b.step++; b.next += PAD_LEN; }
+        const PATTERN = [0, 1, 2, 3, 4, 3, 2, 1];
+        while (b.arp < until) {
+          const chordAt = Math.floor((b.arp - b.next + PAD_LEN * b.step) / PAD_LEN);
+          const ch = PAD_CHORDS[((chordAt % 4) + 4) % 4];
+          const n = ch.notes[PATTERN[b.i % 8]];
+          aTone(b.lp, { freq: midi(n), t: b.arp, dur: 0.9, gain: 0.05, type: "triangle", attack: 0.04, release: 0.8, pan: rand(-0.3, 0.3) });
+          aTone(b.lp, { freq: midi(n), t: b.arp, dur: 0.9, gain: 0.03, attack: 0.04, release: 0.8 });
+          b.i++; b.arp += BEAT / 2;
+        }
+      },
+    },
+    // 4: lo-fi tape pad. The pad with a slow tape wobble in pitch and a soft bass walking
+    // through each chord on the beat
+    tape: {
+      begin(b) {
+        const w = ctx.createOscillator(), wg = ctx.createGain();
+        w.frequency.value = 0.45; wg.gain.value = 9; w.connect(wg); w.start(); b.keep.push(w);
+        b.wobble = wg;
+        padBegin(b, 850);
+        b.walk = b.next; b.j = 0;
+      },
+      run(b, until) {
+        while (b.next < until) { padChord(b, PAD_CHORDS[b.step % 4], b.next, 0.012); b.step++; b.next += PAD_LEN; }
+        while (b.walk < until) {
+          const chordAt = Math.floor((b.walk - b.next + PAD_LEN * b.step) / PAD_LEN);
+          const ch = PAD_CHORDS[((chordAt % 4) + 4) % 4];
+          // Root, fifth, octave, fifth: a lazy walk in the A♭2–A♭3 range
+          const n = ch.root + [0, 7, 12, 7][b.j % 4];
+          aTone(b.bus, { freq: midi(n), t: b.walk, dur: BEAT * 0.95, gain: 0.08, type: "triangle", attack: 0.03, release: 0.5, mod: b.wobble });
+          b.j++; b.walk += BEAT;
+        }
+      },
+    },
+  };
+
+  function setAmbient(kind) {
+    const c = audio(); if (!c) return;
+    if (amb) {
+      const old = amb; amb = null;
+      clearInterval(old.timer);
+      const og = (old.out || old.bus).gain;
+      og.cancelScheduledValues(c.currentTime);
+      og.setTargetAtTime(0, c.currentTime, 1);
+      setTimeout(() => { old.keep.forEach((o) => { try { o.stop(); } catch {} }); (old.out || old.bus).disconnect(); }, 6000);
+    }
+    if (!kind || !BEDS[kind]) return;
+    const bus = c.createGain();
+    bus.gain.value = 0;
+    bus.gain.setTargetAtTime(ambLevel, c.currentTime, 1.5);
+    bus.connect(master);
+    const b = { bus, keep: [], bed: BEDS[kind] };
+    b.bed.begin(b);
+    // Schedule ~1.2 s ahead; if the tab slept, skip ahead instead of firing a backlog
+    const pump = () => {
+      const now = ctx.currentTime;
+      // Keep the chord, beat and note clocks in step when skipping
+      if (b.next !== undefined && b.next < now) {
+        const skip = Math.ceil((now - b.next) / PAD_LEN) * PAD_LEN;
+        for (const k of ["next", "beat", "arp", "walk"]) if (b[k] !== undefined) b[k] += skip;
+      }
+      b.bed.run(b, now + 1.2);
+    };
+    pump();
+    b.timer = setInterval(pump, 200);
+    amb = b;
+  }
+
+  // ── Pads ──
+  const PADS = [
+    { k: "1", name: "Plant spawns", what: "Mellow e-piano note over a soft sub, then rising notes in time. Lower for tall plants.", c: "#5dbb63", play: () => S.spawn() },
+    { k: "2", name: "Rare golden plant", what: "A♭maj9 chord rolled upward, with a short echo.", c: "#ffd700", play: S.rare },
+    { k: "3", name: "Sway (hover)", what: "Soft bass-drum thud in A♭ with a faint leaf brush; harder swings hit harder.", c: "#4caf50", play: () => S.sway(rand(0.4, 1)) },
+    { k: "4", name: "Tap tree · A: Marimba", what: "A warm wooden marimba note from the A♭ scale.", c: "#8b5a3c", play: S.marimba },
+    { k: "q", name: "Tap tree · B: Floor tom", what: "A deep drum hit that pairs with the sway thud.", c: "#8b5a3c", play: S.tom },
+    { k: "w", name: "Tap tree · C: Leaf shaker", what: "Leaves shaking in 16ths over a soft thump.", c: "#8b5a3c", play: S.shaker },
+    { k: "5", name: "Tap flower", what: "Swoosh, a soft puff, then pollen notes in 16ths.", c: "#ff8fb1", play: S.flower },
+    { k: "6", name: "Pollen · A: Celesta", what: "Tiny muted celesta note, very quiet.", c: "#ffe9a8", play: () => S.celesta() },
+    { k: "e", name: "Pollen · B: Dewdrop", what: "A short round blip that bends up into the note, like a drop of water, with a soft echo.", c: "#ffe9a8", play: () => S.dewdrop() },
+    { k: "r", name: "Pollen · C: Breath", what: "A soft, airy flute puff on a note from the scale, like a breath of wind.", c: "#ffe9a8", play: () => S.breath() },
+    { k: "t", name: "Pollen · D: Glint (A + B)", what: "The dewdrop's little bend-up blip, then a celesta note that rings out into a soft echo.", c: "#ffe9a8", play: () => S.glint() },
+    { k: "7", name: "Pick up / drop", what: "Two-note lift, then a low thud when it lands.", c: "#b48cff", play: () => { S.pickup(); setTimeout(S.drop, 450); } },
+    { k: "8", name: "Remove at edge", what: "Four notes falling down the scale as it fades.", c: "#ff5a2f", play: S.remove },
+    { k: "9", name: "Flock arrives", what: "One or two soft, distant chirps from the side.", c: "#e6ece0", play: S.flock },
+    { k: "0", name: "Flock scatters", what: "Wing flutter and a burst of chirps.", c: "#e6ece0", play: S.scatter },
+  ];
+
+  const grid = document.getElementById("grid");
+  const byKey = {};
+  for (const p of PADS) {
+    const b = document.createElement("button");
+    b.className = "pad"; b.type = "button"; b.id = "pad-" + p.k;
+    b.style.setProperty("--c", p.c);
+    b.innerHTML = `<span class="top"><span class="name"></span><span class="key"></span></span><span class="what"></span><span class="dots" aria-hidden="true">${"<i></i>".repeat(8)}</span>`;
+    b.querySelector(".name").textContent = p.name;
+    b.querySelector(".key").textContent = p.k;
+    b.querySelector(".what").textContent = p.what;
+    const fire = () => {
+      p.play();
+      b.classList.add("on");
+      clearTimeout(b._t); b._t = setTimeout(() => b.classList.remove("on"), 160);
+    };
+    b.addEventListener("click", fire);
+    byKey[p.k] = fire;
+    grid.appendChild(b);
+  }
+  document.addEventListener("keydown", (e) => {
+    if (e.target.closest && e.target.closest("input")) return;
+    if (byKey[e.key]) byKey[e.key]();
+  });
+
+  // ── Controls ──
+  const vol = document.getElementById("vol");
+  const muteBtn = document.getElementById("mute");
+  const applyVol = () => { if (master) master.gain.setTargetAtTime(muted ? 0 : volume, ctx.currentTime, 0.03); };
+  vol.addEventListener("input", () => { volume = +vol.value; applyVol(); });
+  muteBtn.addEventListener("click", () => {
+    muted = !muted; audio(); applyVol();
+    muteBtn.setAttribute("aria-pressed", String(muted));
+    muteBtn.textContent = muted ? "Unmute" : "Mute";
+  });
+  // Ambient cards: one bed at a time; press the playing one again to stop it
+  const AMBIENTS = [
+    { id: "sunny", name: "1: Sunny pad", what: "The slow pad you liked, now on bright major chords that change every 10 seconds, with a filter that slowly breathes open and closed.", c: "#ffd166" },
+    { id: "pulse", name: "2: Breathing pulse", what: "The same pad gently ducking on every beat at 96 BPM, the soft pumping of lo-fi tracks. It moves like a heartbeat but never stops.", c: "#5dbb63" },
+    { id: "arp", name: "3: Pad with slow arp", what: "A quieter pad with soft, overlapping notes rolling up and down each chord, like a gentle music-box loop in the middle range.", c: "#ff8fb1" },
+    { id: "tape", name: "4: Lo-fi tape", what: "The pad with a slow tape wobble in pitch and a soft bass walking through each chord on the beat. The closest to Refreshed.", c: "#b48cff" },
+  ];
+  const ambGrid = document.getElementById("ambientGrid");
+  const ambCards = [];
+  for (const a of AMBIENTS) {
+    const b = document.createElement("button");
+    b.className = "pad amb"; b.type = "button";
+    b.setAttribute("aria-pressed", "false");
+    b.style.setProperty("--c", a.c);
+    b.innerHTML = `<span class="top"><span class="name"></span><span class="key">play</span></span><span class="what"></span><span class="dots" aria-hidden="true">${"<i></i>".repeat(8)}</span>`;
+    b.querySelector(".name").textContent = a.name;
+    b.querySelector(".what").textContent = a.what;
+    b.addEventListener("click", () => {
+      const on = b.getAttribute("aria-pressed") !== "true";
+      setAmbient(on ? a.id : null);
+      for (const x of ambCards) {
+        const me = x === b && on;
+        x.setAttribute("aria-pressed", String(me));
+        x.querySelector(".key").textContent = me ? "stop" : "play";
+      }
+    });
+    ambCards.push(b);
+    ambGrid.appendChild(b);
+  }
+  const ambVol = document.getElementById("ambVol");
+  ambVol.addEventListener("input", () => {
+    ambLevel = +ambVol.value;
+    if (amb) (amb.out || amb.bus).gain.setTargetAtTime(ambLevel, ctx.currentTime, 0.1);
+  });
+
+  // A short scripted moment that strings the sounds together
+  document.getElementById("scene").addEventListener("click", () => {
+    // Times in beats at 96 BPM
+    const steps = [
+      [0, () => S.spawn(0.3)], [1, () => S.spawn(0.8)], [2, () => S.sway(0.6, -0.3)],
+      [2.25, () => S.pollen()], [2.5, () => S.pollen()], [3, () => S.flock()],
+      [4, () => S.marimba()], [5, () => S.flower()], [6.5, () => S.scatter()],
+      [8, () => S.spawn(0.5)], [9, () => S.rare()],
+    ];
+    for (const [b, fn] of steps) setTimeout(fn, b * BEAT * 1000);
+  });
+
+  // Swipe drum roll. Mouse: one thud per 30px travelled, at least 40 ms apart.
+  // Touch: follows finger speed. The smoothed speed (px per ms) sets both how often thuds
+  // come (one per `touchStep` px of travel) and how hard they hit, so a slow drag ticks
+  // softly and a fast flick rolls loud and dense. A fresh swipe hits straight away.
+  const tune = { touchStep: 20, touchGap: 14 };
+  function makeRoll() {
+    let travelled = 0, last = 0, lastMove = 0, vel = 0;
+    return (dx, pan, touch) => {
+      const now = performance.now(), gap = now - last;
+      if (touch) {
+        const dt = Math.max(8, Math.min(100, now - lastMove));
+        lastMove = now;
+        const v = Math.abs(dx) / dt;
+        vel = gap > 250 ? v : vel * 0.4 + v * 0.6;
+        if (gap > 250) travelled = tune.touchStep;
+        travelled += Math.abs(dx);
+        if (travelled < tune.touchStep || gap < tune.touchGap) return;
+        travelled = Math.min(travelled - tune.touchStep, tune.touchStep);
+        last = now;
+        const speed = Math.min(1, vel / 1.2);
+        S.sway(0.15 + speed * 0.85, pan, gap < 140);
+        return true;
+      }
+      travelled += Math.abs(dx);
+      if (travelled < 30 || gap < 40) return;
+      travelled = Math.min(travelled - 30, 60);
+      last = now;
+      const speed = Math.min(1, Math.abs(dx) / 25);
+      S.sway(0.3 + speed * 0.7, pan, gap < 140);
+      return true;
+    };
+  }
+
+  // ── Swipe pad: throttled rustles + pollen, with dots drifting up ──
+  const pad = document.getElementById("swipe");
+  const cv = document.getElementById("swipeCanvas");
+  const g2 = cv.getContext("2d");
+  const motes = [];
+  let lastX = null, lastTwinkle = 0, raf = 0;
+  const roll = makeRoll();
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function fit() {
+    const r = pad.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
+    cv.width = r.width * dpr; cv.height = r.height * dpr; g2.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  fit(); addEventListener("resize", fit);
+
+  function tick() {
+    raf = 0;
+    const r = pad.getBoundingClientRect();
+    g2.clearRect(0, 0, r.width, r.height);
+    const now = performance.now();
+    for (let i = motes.length - 1; i >= 0; i--) {
+      const m = motes[i], age = (now - m.t) / 1600;
+      if (age >= 1) { motes.splice(i, 1); continue; }
+      m.x += m.vx; m.y += m.vy; m.vx *= 0.97;
+      g2.globalAlpha = 1 - age; g2.fillStyle = "#ffe9a8";
+      g2.beginPath(); g2.arc(m.x, m.y, 1.8, 0, Math.PI * 2); g2.fill();
+    }
+    g2.globalAlpha = 1;
+    if (motes.length) raf = requestAnimationFrame(tick);
+  }
+
+  function brush(x, y, dx, touch = false) {
+    const now = performance.now(), w = pad.clientWidth;
+    const speed = Math.min(1, Math.abs(dx) / (touch ? 12 : 25));
+    if (Math.abs(dx) < 1) return;
+    const pan = (x / w) * 2 - 1;
+    if (roll(dx, pan, touch)) stats.hits++;
+    if (speed > 0.3 && now - lastTwinkle > 250) { lastTwinkle = now; S.pollen(pan); }
+    if (!reduce) {
+      for (let i = 0; i < 2; i++) motes.push({ x, y, vx: dx * 0.05 + rand(-0.4, 0.4), vy: -rand(0.3, 1), t: now });
+      if (!raf) raf = requestAnimationFrame(tick);
+    }
+  }
+
+  let downId = null;
+  // Swipe readout: how many moves the browser reported, how many thuds played, and the
+  // device's own audio delay, so a slow-feeling swipe can be pinned down on a real phone
+  // Live tuning for touch; the garden below uses the same values
+  for (const [id, key, unit] of [["touchStep", "touchStep", ""], ["touchGap", "touchGap", " ms"]]) {
+    const el = document.getElementById(id), out = document.getElementById(id + "Out");
+    el.addEventListener("input", () => { tune[key] = +el.value; out.textContent = el.value + unit; });
+  }
+  const statsEl = document.getElementById("swipeStats");
+  const stats = { moves: 0, hits: 0, px: 0, t0: 0 };
+  function showStats() {
+    if (!stats.moves) return;
+    const ms = Math.max(1, performance.now() - stats.t0);
+    const lat = ctx ? Math.round(((ctx.baseLatency || 0) + (ctx.outputLatency || 0)) * 1000) : 0;
+    statsEl.textContent = `Last swipe: ${Math.round(stats.px)}px in ${Math.round(ms)} ms · ${stats.moves} moves (${Math.round(stats.moves / ms * 1000)}/s) · ${stats.hits} thuds (${Math.round(stats.hits / ms * 1000)}/s)` + (lat ? ` · audio delay on this device about ${lat} ms` : "");
+  }
+  pad.addEventListener("pointerdown", (e) => { downId = e.pointerId; lastX = e.offsetX; audio(); Object.assign(stats, { moves: 0, hits: 0, px: 0, t0: performance.now() }); });
+  pad.addEventListener("pointermove", (e) => {
+    if (e.pointerType === "touch" && e.pointerId !== downId) return;
+    const dx = lastX == null ? 0 : e.offsetX - lastX;
+    lastX = e.offsetX;
+    if (e.pointerType === "touch") { stats.moves++; stats.px += Math.abs(dx); }
+    if (ctx) brush(e.offsetX, e.offsetY, dx, e.pointerType === "touch");
+  });
+  pad.addEventListener("pointerleave", () => { lastX = null; });
+  pad.addEventListener("pointerup", () => { downId = null; showStats(); });
+  pad.addEventListener("pointercancel", () => { downId = null; });
+  // Hovering alone can't start audio, so the first click/tap anywhere unlocks it
+  document.addEventListener("pointerdown", () => audio(), { once: true });
+  pad.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault(); audio();
+      brush(pad.clientWidth / 2, pad.clientHeight / 2, e.key === "ArrowRight" ? 20 : -20);
+    }
+  });
+
+  // Shared with the live garden below
+  const pollenSel = document.getElementById("pollenKind");
+  pollenSel.addEventListener("change", () => { pollenKind = pollenSel.value; S.pollen(); });
+  window.GardenSounds = { S, SIX, roll: makeRoll(), ready: () => !!ctx && ctx.state === "running" };
+})();
+</script>
+
+<script src="vendor/react.production.min.js"></script>
+<script src="vendor/react-dom.production.min.js"></script>
+<script>
+var GardenDemo=(()=>{var gn=Object.create;var It=Object.defineProperty;var vn=Object.getOwnPropertyDescriptor;var xn=Object.getOwnPropertyNames;var yn=Object.getPrototypeOf,Cn=Object.prototype.hasOwnProperty;var wn=(l,r)=>()=>(r||l((r={exports:{}}).exports,r),r.exports),kn=(l,r)=>{for(var n in r)It(l,n,{get:r[n],enumerable:!0})},Ve=(l,r,n,u)=>{if(r&&typeof r=="object"||typeof r=="function")for(let s of xn(r))!Cn.call(l,s)&&s!==n&&It(l,s,{get:()=>r[s],enumerable:!(u=vn(r,s))||u.enumerable});return l};var Dn=(l,r,n)=>(n=l!=null?gn(yn(l)):{},Ve(r||!l||!l.__esModule?It(n,"default",{value:l,enumerable:!0}):n,l)),An=l=>Ve(It({},"__esModule",{value:!0}),l);var Re=wn((Jn,Be)=>{Be.exports=window.React});var zn={};kn(zn,{default:()=>Gt});var T=Dn(Re());var Ie=()=>{},x={},jt={current:()=>"preview",canvas:"canvas",preview:"preview"};var Pn={o:"#6B3F22",y:"#FFC83D",r:"#E5484D",w:"#F2EDE4",v:"#A98BFF"},Fn=1/25,En=10,Sn=300,Ge=450,Jt=14,Ne="garden-hero-v2",Tn=260,Ln=[[[-2,-2],[-1,-1],[0,0],[1,-1],[2,-2]],[[-2,-1],[-1,-1],[0,0],[1,-1],[2,-1]],[[-2,1],[-1,0],[0,0],[1,0],[2,1]],[[-2,-1],[-1,-1],[0,0],[1,-1],[2,-1]]],Vn=new Set(["p","c","y","v"]),$e={fontFamily:'"Geist Pixel", monospace',fontSize:13,fontWeight:400,letterSpacing:0,lineHeight:1.2},qt=["#FF5A2F","#FF8FB1","#B48CFF","#FFFFFF","#FFD166"],Zt=l=>{let r=l>>>0;return()=>{r=r+1831565813|0;let n=Math.imul(r^r>>>15,1|r);return n=n+Math.imul(n^n>>>7,61|n)^n,((n^n>>>14)>>>0)/4294967296}},L=class{m=new Map;put(r,n,u){r=Math.round(r),n=Math.round(n),!(n<0)&&this.m.set(r+","+n,{dx:r,k:n,key:u})}has(r,n){return this.m.has(Math.round(r)+","+Math.round(n))}done(){let r=Array.from(this.m.values()),n=0,u=0,s=0;for(let i of r)i.dx<n&&(n=i.dx),i.dx>u&&(u=i.dx),i.k>s&&(s=i.k);return{dots:r,minDx:n,maxDx:u,top:s}}},C=(l,r,n)=>r+l()*(n-r);function ee(l,r,n,u=!1){let s=C(n,-1,1)*Math.min(2,r/10),i=[];for(let d=0;d<r;d++){let f=Math.round(s*Math.sin(d/r*Math.PI*.85));i.push(f),l.put(f,d,"s"),u&&l.put(f+1,d,"L")}return i}function te(l,r,n,u,s){for(let i=1;i<=s;i++){let d=n+Math.round(i*.55);l.put(r+u*i,d,"l"),i>1&&i<s&&l.put(r+u*i,d-1,"L")}}function Bn(l,r,n,u,s,i,d){let f=n()<.5?-1:1;for(let m=Math.round(r.length*u);m<r.length*s;m+=i+Math.floor(n()*2))te(l,r[m],m,f,d+(n()<.4?1:0)),f=-f}function Rn(l,r,n,u,s,i,d,f,m){for(let c=-u-1;c<=u+1;c++)for(let h=-u-1;h<=u+1;h++){let y=Math.hypot(h,c);y<=i?l.put(r+h,n+c,m()<.25?"o":f):y<=u+.45&&Math.cos(s*Math.atan2(c,h))>-.25&&l.put(r+h,n+c,d)}}function In(l,r){let n=new L,u=Math.max(2,Math.min(4,Math.round(l/7))),s=Math.max(3,l-u*2),i=ee(n,s,r);return Bn(n,i,r,.15,.7,Math.max(3,Math.round(s/4)),2),Rn(n,i[s-1],s+u-1,u,8+Math.floor(r()*5),u*.4+.3,"p","c",r),n.done()}function Gn(l,r){let n=new L,u=l>=16?3:2,s=u*2+1,i=Math.max(3,l-s),d=ee(n,i,r),f=Math.round(i*C(r,.4,.6));for(let c of[-1,1])for(let h=0;h<f;h++){let y=c*Math.round(h*.3+1);n.put(y,h,"l"),h<f*.7&&n.put(y+c,h,"L")}let m=d[i-1];for(let c=0;c<s-1;c++){let h=c===0?u-1:u;for(let y=-h;y<=h;y++)n.put(m+y,i+c,Math.abs(y)===h&&c>0?"p":y===0&&c>1?"c":"p")}for(let c of[-u,0,u])n.put(m+c,i+s-1,"p");return n.done()}function On(l,r){let n=new L,u=Math.max(3,Math.min(6,Math.round(l/5))),s=Math.max(4,l-u*2),i=ee(n,s,r,!0),d=r()<.5?-1:1;for(let c=Math.round(s*.2);c<s*.8;c+=Math.max(3,Math.round(s/4)))te(n,i[c]+(d>0?1:0),c,d,4),te(n,i[c]+(d>0?1:0),c+1,d,3),d=-d;let f=i[s-1],m=s+u-1;for(let c=-u-1;c<=u+1;c++)for(let h=-u-1;h<=u+1;h++){let y=Math.hypot(h,c);y<=u*.55?n.put(f+h,m+c,(h+c)%2===0?"o":"b"):y<=u+.45&&Math.cos(16*Math.atan2(c,h))>-.55&&n.put(f+h,m+c,"y")}return n.done()}function Hn(l,r){let n=new L,u=2+Math.floor(r()*3);for(let s=0;s<u;s++){let i=(s-(u-1)/2)*.22+C(r,-.08,.08),d=Math.round(l*C(r,.75,1));for(let f=0;f<d;f++){let m=Math.round(Math.sin(i)*f*.9);f>d*.55?(n.put(m,f,"v"),f%2===0?n.put(m-1,f,"v"):n.put(m+1,f,"v")):n.put(m,f,"s")}}for(let s of[-1,1])for(let i=0;i<3;i++)n.put(s*(i+1),i,i===2?"L":"l");return n.done()}function Nn(l,r){let n=new L,u=1+Math.floor(r()*3);for(let s=0;s<u;s++){let i=s===0,d=Math.max(2,Math.round(l*(i?.55:C(r,.25,.4)))),f=Math.max(2,Math.min(6,Math.round(d*.8))),m=i?0:(s===1?-1:1)*(f+3+Math.floor(r()*2));for(let h=0;h<d;h++)n.put(m,h,"w"),n.put(m+1,h,"w");let c=Math.max(2,Math.round(f*.8));for(let h=0;h<=c;h++)for(let y=-f;y<=f+1;y++){let E=(y-.5)/(f+.5),A=h/(c+.5);E*E+A*A>1||n.put(m+y,d+h,h===0?"o":r()<.14?"w":"r")}}return n.done()}function $n(l,r){let n=new L,u=Math.round(l*C(r,.35,.45));for(let m=0;m<=u;m++)n.put(0,m,"b"),n.put(1,m,"b");for(let m of[-2,-1,2,3])n.put(m,0,"b");for(let m of[-1,1]){let c=Math.round(u*C(r,.55,.8));for(let h=1;h<=3;h++)n.put((m>0?1:0)+m*h,c+h,"b")}let s=Math.max(3,(l-u)/2+1),i=l-s,d=[[.5,i,s*.8]];for(let m=0;m<5;m++)d.push([.5+C(r,-.7,.7)*s,i+C(r,-.4,.4)*s,s*C(r,.45,.7)]);let f=Math.ceil(s*1.6);for(let m=Math.floor(i-f);m<=l;m++)for(let c=-f;c<=f+1;c++){if(!d.some(([y,E,A])=>Math.hypot(c-y,m-E)<=A))continue;let h=(c-.5)/s-(m-i)/s+C(r,-.4,.4);n.put(c,m,r()<.045?"p":h>.35?"L":"l")}return n.done()}function Kn(l,r){let n=new L,u=Math.max(2,Math.round(l*.14));for(let d=0;d<=u+2;d++)n.put(0,d,"b");let s=3+Math.floor(r()*3),i=l-u;for(let d=0;d<s;d++){let f=u+d*i/(s+.5),m=i/s*1.35,c=i*.36*(1-d/(s+1));for(let h=0;h<=m;h++){let y=Math.round(c*(1-h/m)),E=Math.round(f+h);if(E>l)break;for(let A=-y;A<=y;A++)n.put(A,E,A>0&&r()<.65?"L":"l")}}return n.put(0,l,"l"),n.done()}function Un(l,r){let n=new L,u=5+Math.floor(r()*3);n.put(0,0,"s");for(let s=0;s<u;s++){let i=-1.1+2.2*s/(u-1)+C(r,-.1,.1),d=l*C(r,.6,1)*(1-Math.abs(i)*.3),f=i*.35,m=0,c=0;for(let h=0;h<d;h++)if(f+=i*.04,m+=Math.sin(f),c+=Math.cos(f),n.put(m,c,h<2?"s":"l"),h>1&&h%2===0){let y=Math.round((1-h/d)*2.5)+1;for(let E of[-1,1])for(let A=1;A<=y;A++)n.put(m+Math.cos(f)*A*E,c-Math.sin(f)*A*E+A*.3,A===y?"l":"L")}}return n.done()}function _n(l,r){let n=new L;for(let i=0;i<l;i++){for(let d=-1;d<=1;d++)i===l-1&&d!==0||n.put(d,i,d===0?"s":i%2?"L":"s");i>1&&r()<.12&&n.put(r()<.5?-2:2,i,"w")}let u=1+Math.floor(r()*2),s=r()<.5?-1:1;for(let i=0;i<u;i++){let d=Math.round(l*C(r,.28,.55)),f=2+Math.floor(r()*2);for(let c=1;c<=f;c++)n.put(s*(1+c),d,"s"),n.put(s*(1+c),d+1,"L");let m=Math.round(l*C(r,.2,.35));for(let c=0;c<=m;c++)n.put(s*(1+f),d+c,"s"),c<m&&n.put(s*(2+f),d+c,"L");s=-s}return r()<.6&&(n.put(-1,l,"p"),n.put(0,l,"c"),n.put(1,l,"p"),n.put(0,l+1,"p")),n.done()}function Wn(l,r){let n=new L,u=Math.max(3,Math.round(l*.75));for(let s=0;s<=l;s++)for(let i=-u;i<=u;i++)(i/(u+.5))**2+(s/(l+.5))**2>1-r()*.12||n.put(i,s,r()<.07?"p":s<l*.35||r()<.25?"L":"l");return n.done()}var Qt=[{make:In,heightScale:1},{make:Gn,heightScale:1},{make:On,heightScale:1},{make:Hn,heightScale:1},{make:Nn,heightScale:.4},{make:$n,heightScale:1},{make:Kn,heightScale:1},{make:Un,heightScale:.7},{make:_n,heightScale:.8},{make:Wn,heightScale:.45}],Xn=()=>{try{let l=localStorage.getItem(Ne);return l?JSON.parse(l):null}catch{return null}},Yn=l=>{try{localStorage.setItem(Ne,JSON.stringify(l))}catch{}},Oe=55,He=5;function Gt(l){let{gridColor:r="rgba(255,255,255,0.08)",soilColor:n="#7A5236",stemColor:u="#5DBB63",leafColor:s="#4CAF50",leafDarkColor:i="#2E7D3A",trunkColor:d="#8B5A3C",petalColors:f=qt,centerColor:m="#FFD166",goldColor:c="#FFD700",background:h="transparent",textColor:y="rgba(255,255,255,0.55)",font:E=$e,spacing:A=9,gridDot:Ke=.9,plantDot:Ue=2.4,minHeight:_e=90,maxHeight:We=280,plantOn:ne="Ground",showGround:yt=!0,groundHeight:oe=45,wind:Xe=1,maxPlants:Ye=30,persist:ze=!0,showCounter:je=!0,pollen:Je=!0,pollenColor:Ze="#FFE9A8",birds:Qe=!0,birdColor:qe="rgba(255,255,255,0.75)",birdRate:tn=4,onEvent:en}=l,re=T.useRef(null),ae=T.useRef(null),Ot=jt.current()===jt.canvas,[nn,on]=T.useState(""),le={gridColor:r,soilColor:n,stemColor:u,leafColor:s,leafDarkColor:i,trunkColor:d,petalColors:f,centerColor:m,goldColor:c,gridDot:Ke,plantDot:Ue,minHeight:_e,maxHeight:We,wind:Xe,maxPlants:Ye,persist:ze,pollen:Je,pollenColor:Ze,birds:Qe,birdColor:qe,birdRate:tn,onEvent:en},V=T.useRef(le);return V.current=le,T.useEffect(()=>{let Ct=re.current,w=ae.current;if(!Ct||!w)return;let B=w.getContext("2d");if(!B)return;let Z=typeof matchMedia<"u"&&matchMedia("(prefers-reduced-motion: reduce)").matches,rn=typeof matchMedia<"u"&&matchMedia("(pointer: coarse)").matches,se=ne==="Ground",O=0,Q=0,K=1,v=9,q=1,H=1,Y=0,tt=0,bt=1,st=0,F=[],Mt=0,gt=0,it=!0,ut=0,wt=0,ct=[],z=[],Ht=performance.now()+2500,dt=0,S=new Uint8Array(0),kt=new Uint8Array(0),et=new Float32Array(0),nt=new Float32Array(0),Dt=document.createElement("canvas"),ie="",At=32,ue=new Map,an=t=>{let e=ue.get(t);if(!e){e=document.createElement("canvas"),e.width=e.height=At;let a=e.getContext("2d");a.fillStyle=t,a.beginPath(),a.arc(At/2,At/2,At/2-.5,0,Math.PI*2),a.fill(),ue.set(t,e)}return e},Pt=(t,e,a,o)=>{o<=.05||B.drawImage(an(t),e-o,a-o,o*2,o*2)},D=null,ht=0,Ft=0,Et=0,St=0,ot=-1,Tt=0,Lt=0,U=null,rt=0,mt=!1,vt=-1,Nt=-1,ce=rn?"Tap to plant \xB7 Hold to move":"Click to plant \xB7 Drag to move",de="",$t=t=>{t!==de&&(de=t,on(t))},ft=(t=!1)=>{$t(D?t?"Release to remove":"Drop at the edge to remove":Mt===0?ce:`${Mt} planted`+(gt?` \xB7 ${gt} rare found`:"")+` \xB7 ${ce}`)},Vt=()=>{V.current.persist&&Yn({plants:F.filter(t=>!t.diedAt).map(t=>({t:t.type,s:t.seed,h:t.h,c:t.c,r:t.r,g:t.rare,p:t.petal})),planted:Mt,rare:gt})},Kt=t=>{let e=t.shape;t.c=Math.min(Math.max(t.c,-e.minDx),Math.max(-e.minDx,q-1-e.maxDx)),t.r=se?st:Math.min(Math.max(t.r,e.top),H-1)},Ut=(t,e,a,o,p,g)=>{let P=Qt[t],W=Math.max(4,(se?st:H)-2),R=Math.max(4,Math.min(W,Math.round(a*P.heightScale))),pt={type:t,seed:e,h:a,c:o,r:p,rare:!1,petal:e%997,shape:P.make(R,Zt(e)),born:g,phase:e%628/100,bend:0,vel:0,diedAt:0,flowers:[]};return pt.shape.dots.forEach((M,k)=>{Vn.has(M.key)&&pt.flowers.push(k)}),Kt(pt),pt},he=()=>{let t=V.current,e=Math.min(t.minHeight,t.maxHeight),a=Math.max(t.minHeight,t.maxHeight);return Math.round(C(Math.random,e,a)/v)},_=(t,e={})=>{try{V.current.onEvent?.(t,e)}catch{}},j=t=>Math.max(-1,Math.min(1,t/Math.max(1,O)*2-1)),ln=(t,e)=>{let a=performance.now(),o=Ut(Math.floor(Math.random()*Qt.length),Math.random()*2**31|0,he(),t,e,a);o.rare=Math.random()<Fn,F.push(o),Mt++,o.rare&&gt++,_("spawn",{h:Math.min(1,(o.shape.top+1)*v/Math.max(1,V.current.maxHeight)),rare:o.rare,pan:j(Y+t*v)});let p=F.filter(g=>!g.diedAt);p.length>V.current.maxPlants&&(p[0].diedAt=a),Vt(),ft(),N()},me=()=>{let t=V.current;ie=`${t.gridColor}|${t.soilColor}|${t.gridDot}|${t.plantDot}`,Dt.width=w.width,Dt.height=w.height;let e=Dt.getContext("2d");e.setTransform(K,0,0,K,0,0),e.clearRect(0,0,O,Q),e.fillStyle=t.gridColor,e.beginPath();for(let a=0;a<Math.min(H,bt);a++)for(let o=0;o<q;o++){let p=Y+o*v,g=tt+a*v;e.moveTo(p+t.gridDot,g),e.arc(p,g,t.gridDot,0,Math.PI*2)}if(e.fill(),bt<H){let a=Zt(7);e.fillStyle=t.soilColor;for(let o=bt;o<H;o++)for(let p=0;p<q;p++)e.globalAlpha=.35+a()*.5,e.beginPath(),e.arc(Y+p*v,tt+o*v,t.plantDot*C(a,.6,.9),0,Math.PI*2),e.fill();e.globalAlpha=1}},fe=()=>{let t=Ct.getBoundingClientRect();O=t.width,Q=t.height,K=Math.min(window.devicePixelRatio||1,2),w.width=Math.max(1,Math.round(O*K)),w.height=Math.max(1,Math.round(Q*K)),B.setTransform(K,0,0,K,0,0),v=Math.max(5,A),q=Math.max(1,Math.floor(O/v)),H=Math.max(2,Math.floor(Q/v)),Y=(O-(q-1)*v)/2,tt=(Q-(H-1)*v)/2;let e=yt?Math.max(1,Math.round(oe/v)):0;bt=H-e,st=yt?bt-1:H-1,S=new Uint8Array(yt?q:0),kt=new Uint8Array(S.length),et=new Float32Array(S.length),nt=new Float32Array(S.length);for(let a=0;a<S.length;a++){let o=Zt(a*7919+13);S[a]=1+Math.floor(o()*4),kt[a]=o()<.06?3:Math.floor(o()*3)}for(let a of F)Kt(a);me()},pe=(t,e)=>({c:Math.round((t-Y)/v),r:Math.round((e-tt)/v)}),_t=t=>t===D?{x:ht,y:Ft}:{x:Y+t.c*v,y:tt+t.r*v},be=(t,e,a)=>{let o=_t(t),p=t.shape;return e>=o.x+(p.minDx-.5)*v&&e<=o.x+(p.maxDx+.5)*v&&a>=o.y-(p.top+.5)*v&&a<=o.y+.5*v},sn=(t,e)=>{let a=F.filter(o=>!o.diedAt).sort((o,p)=>p.r-o.r||p.born-o.born);for(let o of a)if(be(o,t,e))return o;return null},Wt=(t,e)=>t<Jt||t>O-Jt||e>Q-Jt,un=()=>{let t=V.current;return{c:t.centerColor,s:t.stemColor,l:t.leafColor,L:t.leafDarkColor,b:t.trunkColor,...Pn}},cn=t=>{let e=!1,a=Math.min(t,.05);for(let o of F){let p=-Oe*o.bend-He*o.vel;o.vel+=p*a,o.bend+=o.vel*a;let g=(o.shape.top+1)*v*.3;o.bend>g&&(o.bend=g),o.bend<-g&&(o.bend=-g),Math.abs(o.bend)>.05||Math.abs(o.vel)>.5?e=!0:o.bend=o.vel=0}for(let o=0;o<et.length;o++){let p=-Oe*1.6*et[o]-He*nt[o];nt[o]+=p*a,et[o]+=nt[o]*a,Math.abs(et[o])>.05||Math.abs(nt[o])>.5?e=!0:et[o]=nt[o]=0}return e},dn=()=>{let t=Math.random()<.5?1:-1,e=1+Math.floor(Math.random()*5),a=Math.max(70,Q*.4),o=C(Math.random,48,a),p=C(Math.random,45,80);for(let g=0;g<e;g++){let P=g*C(Math.random,14,22),W=(g%2?1:-1)*Math.ceil(g/2)*C(Math.random,8,12);z.push({x:t>0?-30-P:O+30+P,y:o+W,vx:t*p*C(Math.random,.95,1.05),vy:0,phase:Math.random()*4,flee:0})}_("flock",{pan:t>0?-.7:.7})},Me=(t,e)=>{let a=0;for(let o of z)Math.hypot(o.x-t,o.y-e)>80||(o.flee<=0&&a++,o.flee=1,o.vy=-C(Math.random,70,130),o.vx+=(o.x>=t?1:-1)*50);a&&_("scatter",{pan:j(t)})},hn=(t,e,a,o)=>{ct.length>=Tn||(_("pollen",{pan:j(t)}),ct.push({x:t,y:e,vx:a*.12+C(Math.random,-8,8),vy:-C(Math.random,8,26),born:performance.now(),life:C(Math.random,2500,4500),color:o,seed:Math.random()*10}))},Bt=(t,e=0)=>{let a=V.current,o=un(),p=a.petalColors.length?a.petalColors:qt,g=!1;ie!==`${a.gridColor}|${a.soilColor}|${a.gridDot}|${a.plantDot}`&&me(),B.setTransform(1,0,0,1,0,0),B.clearRect(0,0,w.width,w.height),B.drawImage(Dt,0,0),B.setTransform(K,0,0,K,0,0);let P=!Z&&a.wind>0,W=F.slice().sort((M,k)=>M===D?1:k===D?-1:M.r-k.r||M.born-k.born),R=M=>{let k=M.shape,b=k.top+1,I=_t(M),at=Z?1:Math.min(1,(t-M.born)/(700+b*25));at<1&&(g=!0);let X=1;if(M.diedAt&&(X=1-(t-M.diedAt)/Ge,g=!0,X<=0))return;M===D&&Wt(ht+Et,Ft+St)&&(X=.35);let G=P?a.wind*2*Math.sin(t/1100+M.phase):0,lt=M.bend+G,Te=a.plantDot*(M===D?1.12:1),zt=p[M.petal%p.length],Le=Math.abs(M.vel);if(a.pollen&&!Z&&at>=1&&!M.diedAt&&M.flowers.length&&Le>30)for(let J=Le*e*.06;J>0;J--){if(Math.random()>=J)continue;let $=k.dots[M.flowers[Math.floor(Math.random()*M.flowers.length)]],Rt=$.k/b;hn(I.x+$.dx*v+lt*Math.pow(Rt,1.6),I.y-$.k*v,M.vel,M.rare?a.goldColor:a.pollenColor)}for(let J=0;J<k.dots.length;J++){let $=k.dots[J],Rt=Math.min(1,Math.max(0,at*b-$.k));if(Rt<=0)continue;let fn=$.k/b,pn=I.x+$.dx*v+lt*Math.pow(fn,1.6),bn=I.y-$.k*v,Mn=M.rare?a.goldColor:$.key==="p"?zt:o[$.key];B.globalAlpha=M.rare?X*(.7+.3*Math.sin(t/260+J*1.7)):X,Pt(Mn,pn,bn,Te*Rt)}M.rare&&!Z&&(g=!0),B.globalAlpha=1};for(let M of W)M!==D&&R(M);if(a.birds&&!Z){t>=Ht&&(dn(),Ht=t+6e4/Math.max(.5,a.birdRate)*C(Math.random,.6,1.4));let M=v*.75,k=a.plantDot*.8;for(let b of z){b.x+=b.vx*e,b.y+=b.vy*e+Math.sin(t/600+b.phase)*4*e,b.flee>0?(b.vy-=60*e,b.flee-=e*.4):b.vy*=.98;let I=b.flee>0?14:6,at=Ln[Math.floor(t/1e3*I+b.phase)%4],X=b.vx<0?-1:1;for(let[G,lt]of at)Pt(a.birdColor,b.x+G*M*X,b.y+lt*M,k)}z=z.filter(b=>b.x>-120&&b.x<O+120&&b.y>-60),z.length&&(g=!0)}else z=[];if(S.length){let M=[a.leafColor,a.leafDarkColor,a.stemColor];for(let k=0;k<S.length;k++){let b=S[k],I=Y+k*v,at=P?a.wind*.9*Math.sin(t/800+k*.35):0,X=et[k]+at;for(let G=0;G<b;G++){let lt=(G+1)/b,zt=kt[k]===3&&G===b-1?p[k%p.length]:M[(kt[k]+G)%3];Pt(zt,I+X*lt*lt,tt+(st-G)*v,a.plantDot*(G===b-1?.8:.9))}}}if(D&&(R(D),g=!0),ct.length){let M=a.plantDot*.45,k=P?a.wind*6:0;for(let b of ct){b.vx*=1-e*.6,b.vy-=4*e,b.x+=(b.vx+k+Math.sin(t/400+b.seed)*10)*e,b.y+=b.vy*e;let I=(t-b.born)/b.life;B.globalAlpha=Math.max(0,Math.min(1,I*6,(1-I)*2))*.9,Pt(b.color,b.x,b.y,M)}B.globalAlpha=1,ct=ct.filter(b=>t-b.born<b.life&&b.y>-10&&b.x>-10&&b.x<O+10),g=!0}let pt=F.length;return F=F.filter(M=>!M.diedAt||t-M.diedAt<Ge),F.length!==pt&&Vt(),P&&(F.length||S.length)&&(g=!0),g},ge=t=>{if(ut=0,!it)return;let e=wt?(t-wt)/1e3:0;wt=t;let a=cn(e),o=Bt(t,Math.min(e,.05));a||o?ut=requestAnimationFrame(ge):(wt=0,V.current.birds&&!Z&&(dt=window.setTimeout(N,Math.max(0,Ht-t))))},N=()=>{dt&&(clearTimeout(dt),dt=0),!ut&&!Ot&&it&&(ut=requestAnimationFrame(ge))},Xt=t=>{let e=w.getBoundingClientRect();return{x:t.clientX-e.left,y:t.clientY-e.top}},ve=(t,e,a,o)=>{let p=_t(t);D=t,Et=e-p.x,St=a-p.y,ht=p.x,Ft=p.y;try{w.setPointerCapture(o)}catch{}_("pickup",{pan:j(p.x)}),ft(),N()},mn=(t,e,a,o=!1)=>{if(Z)return;let p=Math.max(-260,Math.min(260,a*9))||(Math.random()<.5?-40:40),g=!1;for(let P of F)P.diedAt||P===D||!be(P,t,e)||(P.vel+=p*.5,g=!0);if(S.length){let P=tt+(st-4)*v;if(e>=P){let W=Math.round((t-Y)/v);for(let R=W-2;R<=W+2;R++)R<0||R>=S.length||(nt[R]+=p*(1-Math.abs(R-W)/3)*.35,g=!0)}}g&&(_("sway",{dx:a,pan:j(t),touch:o}),N())},xe=t=>{if(ot!==-1)return;let{x:e,y:a}=Xt(t);if(Me(e,a),vt=e,Nt=a,ot=t.pointerId,Tt=e,Lt=a,mt=!1,U=sn(e,a),U&&t.pointerType==="touch"){let o=U,p=t.pointerId;rt=window.setTimeout(()=>{rt=0,!mt&&ot===p&&(o.vel+=120,ve(o,Tt,Lt,p))},Sn)}},ye=t=>{let{x:e,y:a}=Xt(t),o=vt<0?0:e-vt;if(vt=e,Nt=a,t.pointerId===ot&&(Math.hypot(e-Tt,a-Lt)>En&&(mt=!0),!D&&mt&&U&&t.pointerType!=="touch"&&ve(U,Tt,Lt,t.pointerId),D)){let g=ht;ht=e-Et,Ft=a-St,D.vel-=(ht-g)*6,ft(Wt(e,a));return}let p=t.pointerType==="touch"&&t.pointerId===ot&&mt;(t.pointerType!=="touch"||p)&&(mn(e,a,o,t.pointerType==="touch"),z.length&&Me(e,a))},Ce=()=>{ot=-1,U=null,rt&&(clearTimeout(rt),rt=0)},we=t=>{if(t.pointerId!==ot)return;let{x:e,y:a}=Xt(t);if(D){let o=D;if(D=null,Wt(e,a))o.diedAt=performance.now(),_("remove",{pan:j(e)});else{_("drop",{pan:j(e)});let p=pe(e-Et,a-St);o.c=p.c,o.r=p.r,Kt(o),o.vel+=90}Vt(),ft(),N()}else if(!mt)if(U)U.vel+=160*(Math.random()<.5?-1:1),_("tap",{flower:U.flowers.length>0,pan:j(e)}),N();else{let o=pe(e,a);ln(o.c,o.r)}Ce()},ke=()=>{D&&(D=null,ft(),N()),Ce()},De=()=>{vt=Nt=-1},Ae=t=>{D&&t.preventDefault()},Pe=t=>t.preventDefault();fe();let Yt=performance.now(),xt=V.current.persist?Xn():null;if(xt&&Array.isArray(xt.plants))F=xt.plants.filter(t=>t&&t.t>=0&&t.t<Qt.length).map(t=>{let e=Ut(t.t,t.s|0,t.h|0,t.c|0,t.r|0,Yt-6e4);return e.rare=!!t.g,e.petal=t.p|0,e}),Mt=xt.planted|0,gt=xt.rare|0;else{let t=[5,0,7,2,1];t.forEach((e,a)=>{let o=Math.round((a+.5)/t.length*q+C(Math.random,-3,3)),p=st-Math.floor(Math.random()*Math.max(1,H*.25));F.push(Ut(e,Math.random()*2**31|0,he(),o,p,Yt+a*300))})}if(ft(),Ot){Bt(Yt+6e4);return}let Fe=typeof ResizeObserver<"u"?new ResizeObserver(()=>{fe(),ut||Bt(performance.now())}):null;Fe?.observe(Ct);let Ee=typeof IntersectionObserver<"u"?new IntersectionObserver(([t])=>{it=t.isIntersecting,it&&N()}):null;Ee?.observe(Ct);let Se=()=>{it=!document.hidden,it&&N()};return document.addEventListener("visibilitychange",Se),w.addEventListener("pointerdown",xe),w.addEventListener("pointermove",ye),w.addEventListener("pointerup",we),w.addEventListener("pointercancel",ke),w.addEventListener("pointerleave",De),w.addEventListener("touchmove",Ae,{passive:!1}),w.addEventListener("contextmenu",Pe),Bt(performance.now()),N(),()=>{Vt(),cancelAnimationFrame(ut),rt&&clearTimeout(rt),dt&&clearTimeout(dt),Fe?.disconnect(),Ee?.disconnect(),document.removeEventListener("visibilitychange",Se),w.removeEventListener("pointerdown",xe),w.removeEventListener("pointermove",ye),w.removeEventListener("pointerup",we),w.removeEventListener("pointercancel",ke),w.removeEventListener("pointerleave",De),w.removeEventListener("touchmove",Ae),w.removeEventListener("contextmenu",Pe)}},[Ot,A,ne,yt,oe]),T.createElement("div",{ref:re,style:{position:"relative",width:"100%",height:"100%",overflow:"hidden",background:h,WebkitTapHighlightColor:"transparent",userSelect:"none",WebkitUserSelect:"none",outline:"none"}},T.createElement("canvas",{ref:ae,style:{position:"absolute",inset:0,width:"100%",height:"100%",display:"block",touchAction:"pan-y pinch-zoom",userSelect:"none",WebkitUserSelect:"none",WebkitTouchCallout:"none",WebkitTapHighlightColor:"transparent",outline:"none",cursor:"pointer"}}),je&&T.createElement("div",{"aria-live":"polite",style:{position:"absolute",left:0,right:0,top:16,textAlign:"center",pointerEvents:"none",userSelect:"none",color:y,...E}},nn))}Gt.displayName="Garden Hero";Ie(Gt,{plantOn:{type:x.Enum,title:"Plant On",options:["Ground","Anywhere"],defaultValue:"Ground",displaySegmentedControl:!0},minHeight:{type:x.Number,title:"Min Height",min:30,max:800,step:5,unit:"px",defaultValue:90},maxHeight:{type:x.Number,title:"Max Height",min:30,max:800,step:5,unit:"px",defaultValue:280},showGround:{type:x.Boolean,title:"Ground",defaultValue:!0},groundHeight:{type:x.Number,title:"Ground Height",min:10,max:200,step:1,unit:"px",defaultValue:45,hidden:l=>!l.showGround},soilColor:{type:x.Color,title:"Soil",defaultValue:"#7A5236",hidden:l=>!l.showGround},gridColor:{type:x.Color,title:"Grid",defaultValue:"rgba(255,255,255,0.08)"},petalColors:{type:x.Array,title:"Petals",control:{type:x.Color},defaultValue:qt},centerColor:{type:x.Color,title:"Centre",defaultValue:"#FFD166"},stemColor:{type:x.Color,title:"Stem",defaultValue:"#5DBB63"},leafColor:{type:x.Color,title:"Leaf",defaultValue:"#4CAF50"},leafDarkColor:{type:x.Color,title:"Leaf Shade",defaultValue:"#2E7D3A"},trunkColor:{type:x.Color,title:"Trunk",defaultValue:"#8B5A3C"},goldColor:{type:x.Color,title:"Rare",defaultValue:"#FFD700"},background:{type:x.Color,title:"Background",defaultValue:"transparent"},spacing:{type:x.Number,title:"Grid Gap",min:5,max:30,step:1,unit:"px",defaultValue:9},gridDot:{type:x.Number,title:"Grid Dot",min:.3,max:3,step:.1,defaultValue:.9},plantDot:{type:x.Number,title:"Plant Dot",min:.5,max:8,step:.1,defaultValue:2.4},wind:{type:x.Number,title:"Wind",min:0,max:4,step:.5,defaultValue:1},maxPlants:{type:x.Number,title:"Max Plants",min:5,max:80,step:1,defaultValue:30},persist:{type:x.Boolean,title:"Remember",defaultValue:!0},pollen:{type:x.Boolean,title:"Pollen",defaultValue:!0},pollenColor:{type:x.Color,title:"Pollen Color",defaultValue:"#FFE9A8",hidden:l=>!l.pollen},birds:{type:x.Boolean,title:"Birds",defaultValue:!0},birdColor:{type:x.Color,title:"Bird Color",defaultValue:"rgba(255,255,255,0.75)",hidden:l=>!l.birds},birdRate:{type:x.Number,title:"Flocks / min",min:.5,max:20,step:.5,defaultValue:4,hidden:l=>!l.birds},showCounter:{type:x.Boolean,title:"Counter",defaultValue:!0},font:{type:x.Font,title:"Font",controls:"extended",defaultFontType:"monospace",defaultValue:$e,hidden:l=>!l.showCounter},textColor:{type:x.Color,title:"Text",defaultValue:"rgba(255,255,255,0.55)",hidden:l=>!l.showCounter}});return An(zn);})();
+</script>
+<script>
+(() => {
+  const host = document.getElementById("garden");
+  const fallback = document.getElementById("gardenFallback");
+  const G = window.GardenSounds;
+  const Garden = window.GardenDemo && window.GardenDemo.default;
+  if (!window.React || !window.ReactDOM || !Garden) {
+    fallback.textContent = "The garden couldn't load here. The sound pads above still work.";
+    return;
+  }
+  const treeSel = document.getElementById("treeTap");
+  let lastPollen = 0, lastTap = 0;
+
+  // Map garden events to sounds; nothing plays until the first click unlocks audio
+  function onEvent(name, d) {
+    if (!G.ready()) return;
+    const now = performance.now();
+    const S = G.S;
+    switch (name) {
+      case "spawn":
+        S.spawn(d.h);
+        if (d.rare) setTimeout(S.rare, G.SIX * 4000);
+        break;
+      case "sway":
+        // Same drum-roll rule as the swipe strip, with the shorter step on touch
+        G.roll(d.dx || 0, d.pan, !!d.touch);
+        break;
+      case "tap":
+        lastTap = now;
+        if (d.flower) S.flower(); else S[treeSel.value]();
+        break;
+      case "pollen":
+        // Flower taps already carry their own pollen notes
+        if (now - lastTap > 400 && now - lastPollen > 250) { lastPollen = now; S.pollen(d.pan); }
+        break;
+      case "pickup": S.pickup(); break;
+      case "drop": S.drop(); break;
+      case "remove": S.remove(); break;
+      case "flock": S.flock(); break;
+      case "scatter": S.scatter(); break;
+    }
+  }
+
+  let root = null, key = 0;
+  function mount() {
+    if (!root) root = ReactDOM.createRoot(host);
+    root.render(React.createElement(Garden, {
+      key: key++,
+      onEvent,
+      background: "#0d110c",
+      gridColor: "rgba(230,236,224,0.08)",
+      textColor: "rgba(230,236,224,0.55)",
+    }));
+  }
+  mount();
+
+  document.getElementById("resetGarden").addEventListener("click", () => {
+    // Unmount first: the garden saves itself on unmount, so clear storage after that
+    ReactDOM.flushSync(() => root.render(null));
+    try { localStorage.removeItem("garden-hero-v2"); } catch (e) {}
+    mount();
+  });
+})();
+</script>
+
+</body></html>
