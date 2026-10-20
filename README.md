@@ -120,4 +120,4 @@ The board works in any current browser with Web Audio: Chrome, Edge, Firefox and
 
 ---
 
-Made by [Vansh Rastogi](https://github.com/r-vansh).
+Brought to you by [Vansh Rastogi](https://github.com/r-vansh).
